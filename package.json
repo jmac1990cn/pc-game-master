@@ -6,13 +6,13 @@
   "main": "src/main.js",
   "author": "王总",
   "license": "MIT",
-  "homepage": "https://github.com/OWNER/pc-game-master",
+  "homepage": "https://github.com/jmac1990cn/pc-game-master",
   "repository": {
     "type": "git",
-    "url": "https://github.com/OWNER/pc-game-master.git"
+    "url": "https://github.com/jmac1990cn/pc-game-master.git"
   },
   "bugs": {
-    "url": "https://github.com/OWNER/pc-game-master/issues"
+    "url": "https://github.com/jmac1990cn/pc-game-master/issues"
   },
   "scripts": {
     "start": "electron .",
