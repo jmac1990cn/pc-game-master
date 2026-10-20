@@ -16,8 +16,12 @@ GITHUB_USER="jmac1990cn"
 
 REPO="pc-game-master"
 
-echo "==> 1. 回填 package.json 中的 OWNER 占位符"
-node -e "const fs=require('fs');const u=process.env.GITHUB_USER;const p='package.json';let s=fs.readFileSync(p,'utf8');const before=(s.match(/github.com\/OWNER/g)||[]).length;s=s.split('github.com/OWNER').join('github.com/'+u);fs.writeFileSync(p,s);console.log('  替换 '+before+' 处 OWNER -> '+u);"
+echo "==> 1. 回填 package.json 中的 OWNER 占位符（若已回填则自动跳过）"
+if command -v node >/dev/null 2>&1; then
+  node -e "const fs=require('fs');const u=process.env.GITHUB_USER;const p='package.json';let s=fs.readFileSync(p,'utf8');const before=(s.match(/github.com\/OWNER/g)||[]).length;s=s.split('github.com/OWNER').join('github.com/'+u);fs.writeFileSync(p,s);console.log('  替换 '+before+' 处 OWNER -> '+u);" || echo "   (node 回填跳过)"
+else
+  echo "   (未检测到 node，跳过；package.json 若已是真实地址则无需处理)"
+fi
 
 echo "==> 2. 提交仓库地址回填"
 git add package.json
