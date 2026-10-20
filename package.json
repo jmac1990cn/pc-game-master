@@ -29,7 +29,7 @@
     "shot:ui": "node tools/shot-ui.js",
     "verify": "npm run check && npm run check:ui && npm run smoke",
     "icon": "python tools/make-icon.py --preview",
-    "build": "electron-builder --win",
+    "build": "electron-builder --win --publish=never",
     "build:portable": "electron-builder --win portable"
   },
   "dependencies": {},
@@ -38,6 +38,7 @@
     "electron-builder": "^24.13.3"
   },
   "build": {
+    "publish": null,
     "appId": "com.wangzong.pcgamemaster",
     "productName": "PC Game Master",
     "copyright": "Copyright © 2026 王总",
