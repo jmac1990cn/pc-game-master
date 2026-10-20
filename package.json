@@ -1,0 +1,76 @@
+{
+  "name": "pc-game-master",
+  "productName": "PC Game Master",
+  "version": "1.0.0",
+  "description": "Windows 游戏管理前端：Steam / Epic / 国服战网 / 育碧 / Xbox，大屏模式，游玩时长统计，音频通道切换，自定义背景，修改器联动启动",
+  "main": "src/main.js",
+  "author": "王总",
+  "license": "MIT",
+  "homepage": "https://github.com/OWNER/pc-game-master",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OWNER/pc-game-master.git"
+  },
+  "bugs": {
+    "url": "https://github.com/OWNER/pc-game-master/issues"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "check": "node -e \"const fs=require('fs'),p=require('path');let n=0;for(const d of ['src','renderer']){for(const f of fs.readdirSync(d)){if(f.endsWith('.js')){require('child_process').execFileSync(process.execPath,['--check',p.join(d,f)]);console.log('OK  '+p.join(d,f));n++}}};console.log(n+' files ok')\"",
+    "check:ui": "node tools/check-ui.js",
+    "smoke": "node tools/smoke-test.js",
+    "check:session": "node tools/check-session.js",
+    "check:focus": "node tools/check-focus.js",
+    "check:layout": "node tools/check-layout.js",
+    "check:dlc": "node tools/check-dlc.js",
+    "check:screensaver": "node tools/check-screensaver.js",
+    "check:asar": "node tools/check-asar.js",
+    "shot:ui": "node tools/shot-ui.js",
+    "verify": "npm run check && npm run check:ui && npm run smoke",
+    "icon": "python tools/make-icon.py --preview",
+    "build": "electron-builder --win",
+    "build:portable": "electron-builder --win portable"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.wangzong.pcgamemaster",
+    "productName": "PC Game Master",
+    "copyright": "Copyright © 2026 王总",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "${productName}-${version}-setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PC Game Master",
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}

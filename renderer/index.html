@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="s3A7jkvNJhpbv4sT5GRqwc">
+<head data-page-node-id="ATrH7SoKpDPzN6LBuINND2">
+  <meta charset="UTF-8" data-page-node-id="DqdzkcaCYnmCC475LITVt3" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="1Xy48eUontT7cXOf6sPb51" />
+  <title>PC Game Master</title>
+  <link rel="stylesheet" href="style.css" data-page-node-id="u5tUClJntDn9jfLHEOJJEF" />
+</head>
+<body data-page-node-id="XxEx0XItlH9htIpX2cxzC7">
+  <div id="app" data-page-node-id="uK03xILAdlhydl75sC1R2h">
+    <!-- 顶部栏 -->
+    <header class="topbar" data-page-node-id="ssufbyIWj6JH0dFeu7RXdR">
+      <div class="brand" data-page-node-id="b9eHPtJPfDFt4WfpBpbF48">🎮 PC Game Master</div>
+      <div class="search-wrap" data-page-node-id="py8oGf9oUZZRG2baqbcPoe">
+        <input id="search" type="text" placeholder="搜索游戏…" autocomplete="off" data-page-node-id="3m27hqLZk8u0YxyhCfgbO9" />
+      </div>
+      <div class="filters" id="filters" data-page-node-id="6kEgexkhipk8FIykuVa6TX">
+        <button data-platform="all" class="active" data-page-node-id="7Ib686Nl2PqWjDskYxSwR1">全部</button>
+        <button data-platform="steam" data-page-node-id="fTpecRnrtyVOv11NzQevCj">Steam</button>
+        <button data-platform="epic" data-page-node-id="7XBaRYTTAmug9rdCag5646">Epic</button>
+        <button data-platform="battlenet" data-page-node-id="IizHNta1Egiwqhu3ODiH43">战网</button>
+        <button data-platform="ubisoft" data-page-node-id="K3iWFXNEcKKTTbC0CaFS7l">育碧</button>
+        <button data-platform="xbox">Xbox</button>
+        <button data-platform="manual" data-page-node-id="x2vCMuU7HKRti5wutaO3qx">手动</button>
+      </div>
+      <div class="actions" data-page-node-id="TL6xp14ctOt9xmyPE5rnZS">
+        <button id="addBtn" title="手动添加游戏（可输 appid 补全信息）" data-page-node-id="ccbKCfMgiu4MCWfDD1ufPR">＋ 添加</button>
+        <button id="scanFolderBtn" title="扫描文件夹批量添加" data-page-node-id="scanFolderBtnNode">📁 扫描</button>
+        <button id="rescanBtn" title="重新扫描" data-page-node-id="jF2uX6u2gSJG05PNzrkxJE">⟳ 刷新</button>
+        <button id="modeBtn" title="切换桌面/全屏模式（F10）">🗔 桌面模式</button>
+        <button id="settingsBtn" title="设置" data-page-node-id="IK9tC0JfxQGtxAAjtfkRmj">⚙ 设置</button>
+        <div class="power-wrap" id="powerWrap">
+          <button id="powerBtn" class="power-btn" title="电源：重启 / 关闭 / 关机">⏻</button>
+          <div class="power-menu" id="powerMenu" hidden>
+            <button data-power="restart">🔄 重启 PC Game Master</button>
+            <button data-power="quit">✕ 关闭 PC Game Master</button>
+            <button data-power="shutdown" class="danger">⏻ 关机（延迟 10 秒）</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- 舞台：背景 + 网格 -->
+    <main class="stage" id="stage" data-page-node-id="EdGSSm4rGUCEGIyIBduEVp">
+      <div class="hero" id="hero" data-page-node-id="oWWXgtTqVHl0vBX3i4uDZy"></div>
+      <div class="hero-overlay" data-page-node-id="DFC1uV52E7JCmbyGE7K3cG"></div>
+      <div class="grid" id="grid" data-page-node-id="Id6DeeQRLrvtZyt4nSaLWr"></div>
+      <div class="empty" id="empty" hidden data-page-node-id="DtHo7CCaMNu6tIvtAlDwSV">没有检测到游戏。点右上角「＋ 添加」手动添加，或去「设置」检查各平台扫描开关。</div>
+      <!-- 桌面模式左侧游戏列表栏 -->
+      <aside class="sidebar" id="sidebar"></aside>
+    </main>
+
+    <!-- 游戏详情页（点选游戏打开，不直接启动） -->
+    <div class="detail" id="detail" hidden>
+      <div class="detail-bg" id="detailBg"></div>
+      <div class="detail-overlay"></div>
+      <button class="detail-close" id="detailClose" title="关闭（Esc）">✕</button>
+      <div class="detail-body">
+        <div class="detail-poster" id="detailPoster"></div>
+        <div class="detail-info">
+          <div class="detail-platform" id="detailPlatform"></div>
+          <h1 class="detail-title" id="detailTitle"></h1>
+          <div class="detail-tags" id="detailTags"></div>
+          <div class="detail-stats" id="detailStats"></div>
+          <div class="detail-controller" id="detailController" hidden></div>
+          <p class="detail-path" id="detailPath"></p>
+          <div class="detail-actions">
+            <button id="detailPlay" class="primary">▶ 启动游戏</button>
+            <button id="detailManage">⚙ 管理</button>
+            <button id="detailSave">💾 存档</button>
+            <button id="detailFolder">📂 目录</button>
+            <button id="detailHide" class="danger">🙈 隐藏</button>
+            <button id="detailRemove" class="danger" hidden>🗑 移除</button>
+          </div>
+          <div class="detail-guides">
+            <div class="detail-guides-title">游戏攻略（浏览器打开）</div>
+            <div class="detail-guides-row">
+              <button id="detailGuideText" title="在 3DM / 游民星空 / 游侠网 等站点搜索图文攻略">📖 图文攻略</button>
+              <button id="detailGuideVideo" title="在 B 站搜索全流程视频攻略">🎬 视频攻略</button>
+              <button id="detailGuideAI" title="打开网页版豆包，询问相关游戏问题解答">🤖 豆包答疑</button>
+            </div>
+          </div>
+          <div class="detail-dlc" id="detailDlc">
+            <div class="detail-dlc-head">
+              <button id="dlcToggle" class="dlc-toggle" aria-expanded="false" title="展开 / 收起 DLC 明细">
+                <span class="dlc-toggle-label">🧩 DLC 管理</span>
+                <span class="dlc-toggle-sum" id="dlcSummary"></span>
+                <span class="dlc-caret">▾</span>
+              </button>
+              <button id="dlcRefresh" class="dlc-refresh" title="手动更新：联网重新下载该游戏的 DLC 资料（平时读本地缓存，不联网）">↻ 更新</button>
+            </div>
+            <div class="detail-dlc-body" id="dlcBody" hidden>
+              <div class="detail-dlc-status" id="dlcStatus"></div>
+              <div class="detail-dlc-list" id="dlcList"></div>
+              <div class="detail-dlc-search">
+                <button id="dlcSearchBtn" title="在 h.juij.fun 用游戏名搜索 DLC">🔍 在线搜索 DLC</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 选中游戏底部操作条 -->
+    <footer class="actionbar" id="actionbar" hidden data-page-node-id="cOveT6dG9DJ1gh62gaFzT8">
+      <div class="ab-info" data-page-node-id="9oi9XT4JqdWSw3gPgEDvvC">
+        <span class="ab-name" id="abName" data-page-node-id="DHf50DCj2HzP7QClF45bJo"></span>
+        <span class="ab-platform" id="abPlatform" data-page-node-id="nvnpDNDiXGxp1xlKASBfrV"></span>
+        <span class="ab-hint" id="abHint" data-page-node-id="oLh3Jkq8X9mN2pQw5RtYvB"></span>
+      </div>
+      <div class="ab-buttons" data-page-node-id="0yw3g0CGNmlLknboCVUPTM">
+        <button id="playBtn" class="primary" data-page-node-id="fiDnUUL3FiZXBbSVx8SFB6">▶ 启动</button>
+        <button id="manageBtn" data-page-node-id="q0xEEPb9MyfO4VhT7cXWzj">⚙ 管理</button>
+        <button id="folderBtn" data-page-node-id="VuSHfo0a3volHn0FYjWT97">📂 目录</button>
+        <button id="hideBtn" class="danger" hidden>🙈 隐藏</button>
+        <button id="removeBtn" class="danger" hidden data-page-node-id="ox9W5Jj4AhY06lZ5iZn1x2">🗑 移除</button>
+      </div>
+    </footer>
+
+    <div class="status" id="status" data-page-node-id="bGBlem7BezeriqNknZj2GJ"></div>
+
+    <!-- 关机倒计时提示条（延迟关机期间显示，可一键取消） -->
+    <div class="shutdown-bar" id="shutdownBar" hidden>
+      <span id="shutdownText">系统将在 10 秒后关机</span>
+      <button id="cancelShutdownBtn">取消关机</button>
+    </div>
+  </div>
+
+  <!-- 管理弹窗 -->
+  <div class="modal" id="manageModal" hidden data-page-node-id="qX9DyzO1SZrXCnddPo8gpF">
+    <div class="modal-card tabbed" data-page-node-id="ZUqMEWtgrNZ3LDclsjLrgc">
+      <div class="modal-head" data-page-node-id="yKXIAnjsDQKhxkHwDJ9H9S">
+        <h2 id="manageTitle" data-page-node-id="zczWHJ3qu88jl7I82IHeW2">管理游戏</h2>
+        <button class="close" data-close data-page-node-id="sQgxNBFz2JwQT3N66pTrGX">✕</button>
+      </div>
+      <div class="tabs" id="manageTabs">
+        <button class="tab-btn active" data-tab="info">资料</button>
+        <button class="tab-btn" data-tab="art">图片</button>
+        <button class="tab-btn" data-tab="launch">启动</button>
+        <button class="tab-btn" data-tab="save">存档</button>
+      </div>
+      <div class="tab-body">
+        <!-- 分页 1：资料 -->
+        <div class="tab-pane active" data-pane="info">
+          <label class="field">
+            <span>Steam appid（用于补全资料：名称/封面/背景/徽标，并可按它拉取该游戏的<b>全部 DLC 清单</b>（非 Steam 游戏也适用，勾选自己已拥有的那几项）；<b>不影响启动方式</b>，非 Steam 游戏填了也还是按自己的启动路径走）</span>
+            <div class="row">
+              <input type="text" id="manageAppid" placeholder="如 730" style="flex:1" />
+              <button id="manageQueryBtn">查询并补全</button>
+            </div>
+          </label>
+          <label class="field">
+            <span>显示名称（中文名；留空则优先用自动抓取的中文名，部分游戏 Steam 无中文标题需手填）</span>
+            <div class="row">
+              <input type="text" id="manageName" placeholder="如 反恐精英 2" style="flex:1" />
+              <button id="manageNameClear">清除</button>
+            </div>
+          </label>
+        </div>
+        <!-- 分页 2：图片 -->
+        <div class="tab-pane" data-pane="art">
+          <div class="art-row">
+            <div class="manage-cover-preview" id="manageCoverPreview"></div>
+            <label class="field">
+              <span>自定义封面图（卡片竖版图；战网/育碧等无 appid 的游戏拿不到在线封面，在这里指定）</span>
+              <div class="row">
+                <button id="pickCoverBtn">🖼 本地封面</button>
+                <button id="clearCoverBtn">清除</button>
+              </div>
+              <span class="hint" id="coverPath"></span>
+            </label>
+          </div>
+          <div class="manage-bg-preview" id="manageBgPreview" data-page-node-id="vC4BLXuB6oRfx5iNi7eUXC"></div>
+          <label class="field" data-page-node-id="wG7pr3PrStp34MNAdg95Uv">
+            <span data-page-node-id="mnzut2qcFeqoGns8fF8XAz">自定义背景图（本地图片，或从 SteamGridDB 在线挑图）</span>
+            <div class="row" data-page-node-id="QYDXP1RP6RAfpwzP0mxgAK">
+              <button id="pickBgBtn" data-page-node-id="ZGeyDA2YQM0lh1M8KqUhky">🖼 本地背景</button>
+              <button id="manageGridBg">🎨 SteamGridDB 背景</button>
+              <button id="clearBgBtn" data-page-node-id="RrEmn7iFR6SGTHIiKrgi9C">清除</button>
+            </div>
+            <span class="hint" id="bgPath" data-page-node-id="CjXeySgZGENfI7jFSOLzyk"></span>
+          </label>
+        </div>
+        <!-- 分页 3：启动 -->
+        <div class="tab-pane" data-pane="launch">
+          <label class="field" data-page-node-id="uqrigbwEdxWZp3hQszRDA4">
+            <span data-page-node-id="5P4gTUFFUhntKo1ldDM7r4">启动音频输出通道（留空 = 跟随设置里的默认通道）</span>
+            <div class="row">
+              <select id="manageAudioDevice" style="flex:1"></select>
+              <button id="testAudioBtn">试听切换</button>
+            </div>
+            <span class="hint" id="manageAudioHint">启动该游戏时切到此通道，游戏进程结束后自动切回默认。</span>
+          </label>
+          <label class="field" data-page-node-id="xSBRHKqO7gDroemPdpsaIj">
+            <span data-page-node-id="xXG8aNHht3Q1o0YfjJYE0o">修改器 / 启动器（随游戏联动）</span>
+            <div class="row" data-page-node-id="Lz9N4MMiqB5GmAL3nD0Och">
+              <button id="pickTrainerBtn" data-page-node-id="kI5Gghxwv4tXJq06YASG01">选择文件</button>
+              <span class="hint" id="trainerPath" data-page-node-id="K5KsbzDpj1gg5JsNVU6DAi"></span>
+            </div>
+            <span class="hint">需要管理员权限的修改器（风灵月影等）会自动请求提权，届时请在 UAC 窗口点「是」。</span>
+          </label>
+          <label class="field" data-page-node-id="uqrigbwEdxWZp3hQszRDA4b">
+            <span data-page-node-id="5P4gTUFFUhntKo1ldDM7r4b">启动顺序</span>
+            <div class="row" data-page-node-id="RGyNDSp6TQdmdXkORDWGIh">
+              <label class="radio" data-page-node-id="5d3PfMilnRy5z2I9JM3Wu7"><input type="radio" name="order" value="game-first" checked data-page-node-id="b0e08RSJtrRAJFuCFf4aiZ" /> 先游戏后修改器</label>
+              <label class="radio" data-page-node-id="my0LkPcXfkyCJH9DZxkmGx"><input type="radio" name="order" value="trainer-first" data-page-node-id="dJDUhlTR9k81QVzmdixC1Z" /> 先修改器后游戏</label>
+            </div>
+          </label>
+          <label class="field" data-page-node-id="YW8d3ktm8KGaaP6nfOr9EG">
+            <span data-page-node-id="uFXgbFWRiZrtQcEGPfQ7ru">修改器延迟启动（毫秒）</span>
+            <input type="number" id="trainerDelay" min="0" step="500" value="0" data-page-node-id="tiuHpaxnTYcFCoGAmQB1wL" />
+          </label>
+          <div class="field">
+            <span>启动选项</span>
+            <div class="row">
+              <select id="launchArgsMode">
+                <option value="normal">使用下方参数</option>
+                <option value="ask">在开始游戏时询问</option>
+              </select>
+              <span class="hint" id="launchArgsHint"></span>
+            </div>
+            <span class="hint">高级用户可以在这里输入对启动选项的修改（会随游戏一起传给可执行文件）。</span>
+            <input type="text" id="launchArgs" placeholder="例如：-windowed -novid -dx11" />
+            <div class="row arg-presets" id="argPresets">
+              <button data-arg="-windowed">窗口化</button>
+              <button data-arg="-fullscreen">全屏</button>
+              <button data-arg="-novid">跳过片头</button>
+              <button data-arg="-dx11">DX11</button>
+              <button data-arg="-dx12">DX12</button>
+              <button data-arg="-skipintro">跳过开场</button>
+            </div>
+          </div>
+          <!-- Steam 启动项双向同步（仅 Steam 平台游戏显示：其它平台没有 Steam 启动项） -->
+          <div class="field steam-sync" id="steamSyncRow" hidden>
+            <span>Steam 启动项同步</span>
+            <label class="check">
+              <input type="checkbox" id="syncSteam" checked />
+              保存时同时写入 Steam 自带的「启动选项」（localconfig.vdf）
+            </label>
+            <div class="row">
+              <button id="pullSteamArgs" type="button">⇩ 读取 Steam 启动项</button>
+              <span class="hint" id="steamArgsHint"></span>
+            </div>
+            <span class="hint">Steam 客户端里「属性 → 启动选项」填的就是这一项；写回后 Steam 需重启才能读到新值。</span>
+          </div>
+        </div>
+        <!-- 分页 4：存档 -->
+        <div class="tab-pane" data-pane="save">
+          <label class="field">
+            <span>存档目录（留空则自动探测；也可手动指定，一键直达）</span>
+            <div class="row">
+              <button id="manageSaveDir">💾 打开存档目录</button>
+              <button id="manageSaveSearch">🌐 在线查询</button>
+              <button id="pickSaveDir">选择目录</button>
+              <button id="clearSaveDir">清除</button>
+            </div>
+            <span class="hint" id="saveDirPath"></span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-foot" data-page-node-id="yNXUvl6ojodbKB9zAEcnAT">
+        <button id="manageSave" class="primary" data-page-node-id="7aH1e56UAr9NKnvni6I0Ke">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 设置弹窗 -->
+  <div class="modal" id="settingsModal" hidden data-page-node-id="NHhzN1SnumLiSGGJiBYIh9">
+    <div class="modal-card tabbed" data-page-node-id="xFusyV81UfXirEvg1eEPzD">
+      <div class="modal-head" data-page-node-id="yH64Gip2XkeaFcHxSHPhKf">
+        <h2 data-page-node-id="LNGEsQTGzHZC8aJZ0bpanX">设置</h2>
+        <button class="close" data-close data-page-node-id="0Z5iN3H54uFbxcnV2FOVB9">✕</button>
+      </div>
+      <div class="tabs" id="settingsTabs">
+        <button class="tab-btn active" data-tab="general">常规</button>
+        <button class="tab-btn" data-tab="platform">平台与扫描</button>
+        <button class="tab-btn" data-tab="audio">音频</button>
+        <button class="tab-btn" data-tab="meta">资料</button>
+        <button class="tab-btn" data-tab="hidden">已隐藏</button>
+      </div>
+      <div class="tab-body">
+        <!-- 分页 1：常规 -->
+        <div class="tab-pane active" data-pane="general">
+          <label class="field check"><input type="checkbox" id="setLogin" /> 开机自动启动</label>
+          <label class="field check"><input type="checkbox" id="setTrim" /> 启动游戏后释放内存（卸掉图片缓存并强制回收，推荐）</label>
+          <label class="field check"><input type="checkbox" id="setMinimize" /> 启动游戏后自动最小化本窗口（把资源让给游戏）</label>
+          <label class="field check"><input type="checkbox" id="setRestoreBigScreen" /> 游戏结束后恢复大屏模式（窗口从最小化还原并切回大屏）</label>
+          <label class="field check"><input type="checkbox" id="setFocusGame" /> 游戏窗口出现后自动切到最前端（游戏启动慢、或平台客户端先起时，不会被压在后面）</label>
+          <label class="field check"><input type="checkbox" id="setScreensaver" /> 空闲时启动屏保（轮播已安装游戏的背景图）</label>
+          <label class="field inline"><span>无操作</span><input type="number" id="setScreensaverMin" min="1" max="120" step="1" value="3" /><span>分钟后启动屏保</span></label>
+          <div class="mem-row">
+            <span id="memInfo" class="hint">内存占用：读取中…</span>
+            <button id="trimMemoryBtn">立即释放内存</button>
+          </div>
+        </div>
+        <!-- 分页 2：平台与扫描 -->
+        <div class="tab-pane" data-pane="platform">
+          <label class="field check"><input type="checkbox" id="setStartPlatform" /> 启动游戏前先启动平台客户端（Epic/战网/育碧/Xbox 未运行时会先拉起来再启动游戏）</label>
+          <label class="field">
+            <span>平台客户端就绪等待（秒）：客户端刚被拉起时，等它完成登录 / DRM 初始化再启动游戏（宁可多等，一次成功）</span>
+            <input type="number" id="setPlatformWait" min="5" max="120" step="1" value="15" />
+          </label>
+          <label class="field" data-page-node-id="t5IHdKyePefdnUNxZhPJfo">
+            <span data-page-node-id="Njqx1fTGnu8eC7EiVo2lCX">战网启动器路径（国服留空自动探测）</span>
+            <div class="row" data-page-node-id="MD5CgmPMjlU2iiz7AXyDyK">
+              <button id="pickBnetBtn" data-page-node-id="hy6J94w9HFoeKWo9HMcnDr">选择</button>
+              <span class="hint" id="bnetPath" data-page-node-id="aYpBnQSKMO1FrMUH6qpWAm"></span>
+            </div>
+          </label>
+          <div class="section-title">扫描的启动器 / 商店</div>
+          <label class="field check" data-page-node-id="XC6D8ngsTJffiFlDjTrd4F"><input type="checkbox" id="setSteam" data-page-node-id="cA3B8dCrrCjAIsIHsYUv5A" /> 扫描 Steam</label>
+          <label class="field check" data-page-node-id="vNtxgZGfZBH9Uh8nJGIuzi"><input type="checkbox" id="setEpic" data-page-node-id="GcHCGvVe4gFBtAJ6YjvQiI" /> 扫描 Epic</label>
+          <label class="field check" data-page-node-id="oF9tACNWSBE9GDAi6wwUuC"><input type="checkbox" id="setBNet" data-page-node-id="qfDqCwoyHlY8Nnt7SQJfqV" /> 扫描 战网（含国服）</label>
+          <label class="field check" data-page-node-id="ZuahG0pUJ1u4GIzLjd8Ybp"><input type="checkbox" id="setUbi" data-page-node-id="w9JXN31MQYqVe31jkYW2jH" /> 扫描 育碧 Connect</label>
+          <label class="field check"><input type="checkbox" id="setXbox" /> 扫描 Xbox / Game Pass 游戏（XboxGames 目录）</label>
+          <label class="field check"><input type="checkbox" id="setXboxApps" /> 扫描 Microsoft Store / MSIX 游戏（Game Pass 常见）</label>
+          <span class="hint">扫描项改动后需重启（或点 ⟳ 刷新）生效。</span>
+        </div>
+        <!-- 分页 3：音频 -->
+        <div class="tab-pane" data-pane="audio">
+          <label class="field">
+            <span>默认音频输出通道（作为「默认」基准；游戏结束后会自动切回这里）</span>
+            <div class="row">
+              <select id="setAudioDevice" style="flex:1"></select>
+              <button id="applyAudioBtn">切换到该通道</button>
+              <button id="refreshAudioBtn">刷新设备</button>
+            </div>
+            <span class="hint" id="audioHint">正在读取音频设备…</span>
+          </label>
+          <label class="field check"><input type="checkbox" id="setSwitchAudio" /> 启动游戏时按游戏设置切换音频通道（游戏进程结束后自动切回默认通道）</label>
+          <span class="hint">想让某款游戏用自己的通道（比如耳机）：到「管理 → 启动」里为它单独指定。游戏中切到桌面不会再被改回默认，直到该游戏退出。</span>
+        </div>
+        <!-- 分页 4：资料 -->
+        <div class="tab-pane" data-pane="meta">
+          <label class="field"><span>SteamGridDB API Key（可选，免费申请于 steamgriddb.com/api，用于抓取徽标/高清背景）</span>
+            <input type="text" id="setGridKey" placeholder="留空则使用 Steam CDN 直链" />
+          </label>
+          <label class="field check"><input type="checkbox" id="setCacheImg" /> 将封面/背景/徽标缓存到本地（离线可用）</label>
+          <div class="mem-row">
+            <span id="metaInfo" class="hint">信息库：读取中…</span>
+            <button id="localizeBtn">重新抓取中文名</button>
+          </div>
+          <span class="hint">资料只影响显示（名称/封面/背景/徽标），不会改变游戏的启动方式。</span>
+        </div>
+        <!-- 分页 5：已隐藏 -->
+        <div class="tab-pane" data-pane="hidden">
+          <div class="hidden-manager">
+            <h4>已隐藏的游戏</h4>
+            <div id="hiddenList" class="hidden-list"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot" data-page-node-id="iBJzIVWkUNoQWgi6xESC9Z">
+        <button id="settingsSave" class="primary" data-page-node-id="N30bhFkFbvySB31pVsh37Q">保存设置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 添加弹窗 -->
+  <div class="modal" id="addModal" hidden data-page-node-id="NRSZtnOBrEq8HiFvoSInzZ">
+    <div class="modal-card" data-page-node-id="ojrmEiG5XEXLZqkwC0JnMg">
+      <div class="modal-head" data-page-node-id="Iuy6Adw5repw17otYOlLBq">
+        <h2 data-page-node-id="xwo2XHHd1KeFtweDcQsRd3">手动添加游戏</h2>
+        <button class="close" data-close data-page-node-id="rOQgpCFFbzDZE6y67Tlu8F">✕</button>
+      </div>
+      <label class="field" data-page-node-id="QFrZINAUJAt6w6QP9m4ZzE"><span data-page-node-id="pzu5aYokdFzHp7j1GPLkKO">游戏名称</span><input type="text" id="addName" placeholder="例如：我的单机游戏" data-page-node-id="Ne4s7LXkxvouOFuem96Kui" /></label>
+      <label class="field" data-page-node-id="QWGxf2Q69UeszUF0NCaRZZ">
+        <span data-page-node-id="iqA97NAPYEl7a32INLzXJC">可执行文件</span>
+        <div class="row" data-page-node-id="ywX6cpi99J9BEJstgVa7rX">
+          <button id="pickAddExe" data-page-node-id="78ptTPUEAoNLcXc7d9YT4W">选择 .exe</button>
+          <span class="hint" id="addExePath" data-page-node-id="5x2LYSBHW6d7MS4WJoE2GR"></span>
+        </div>
+      </label>
+      <label class="field">
+        <span>启动参数（可选 · <b>模拟器游戏填这里</b>）</span>
+        <input type="text" id="addLaunchArgs" placeholder='模拟器示例：--no-gui "%RPCS3_GAMEID%:BCAS20097"' />
+        <span class="hint">模拟器游戏：可执行文件选模拟器本体（如 rpcs3.exe），这里填这款游戏的启动参数，管家会原样传给模拟器 —— 效果等同桌面快捷方式。普通游戏留空即可。</span>
+        <div class="row arg-presets" id="addArgPresets">
+          <button type="button" data-arg="--no-gui">--no-gui</button>
+          <button type="button" data-arg="--fullscreen">--fullscreen</button>
+        </div>
+      </label>
+      <label class="field">
+        <span>Steam appid（可选，用于从 Steam/SteamGridDB 补全中文名、封面、背景、徽标，并可按它拉取<b>全部 DLC 清单</b>；<b>不影响启动方式</b>）</span>
+        <div class="row">
+          <input type="text" id="addAppid" placeholder="如 730" style="flex:1" />
+          <button id="addQueryBtn">查询信息</button>
+        </div>
+      </label>
+      <div class="meta-preview" id="addPreview" hidden>
+        <img id="addPreviewCover" alt="封面" />
+        <div class="mp-info">
+          <div class="mp-name" id="addPreviewName"></div>
+          <div class="mp-src" id="addPreviewSrc"></div>
+          <div class="mp-logowrap" id="addPreviewLogoWrap" hidden><img id="addPreviewLogo" alt="徽标" /></div>
+        </div>
+      </div>
+      <label class="field" data-page-node-id="6GEGWBRdxKPGAfwRkgqtE9"><span data-page-node-id="50pev49jr9EYhs4NpbOhta">自定义封面图（可选，留空则用查询到的）</span>
+        <div class="row" data-page-node-id="vSWGVSBhoGnkklIfYV3Bh9">
+          <button id="pickAddCover" data-page-node-id="egTDXhzB00dnmaWDnfvLhz">选择图片</button>
+          <span class="hint" id="addCoverPath" data-page-node-id="JDxuAeYL1vULgxiNFEad0B"></span>
+        </div>
+      </label>
+      <div class="modal-foot" data-page-node-id="RWi77ev9bgdWwZCJlDdc3T">
+        <button id="addSave" class="primary" data-page-node-id="RgKtUwqALCuQFrCvvFsCKU">添加</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 从 SteamGridDB 选背景图弹窗 -->
+  <div class="modal" id="bgPickerModal" hidden>
+    <div class="modal-card" style="width:min(900px,94vw)">
+      <div class="modal-head">
+        <h2>选择背景图 · <span id="bgPickerTitle"></span></h2>
+        <button class="close" data-close>✕</button>
+      </div>
+      <div class="hint" id="bgPickerHint">从 SteamGridDB 加载候选背景图…</div>
+      <div class="bg-grid" id="bgGrid"></div>
+      <div class="modal-foot">
+        <button id="bgPickerOpenWeb" class="">在浏览器打开 SteamGridDB</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 文件夹扫描弹窗 -->
+  <div class="modal" id="scanModal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>扫描文件夹添加游戏</h2>
+        <button class="close" data-close>✕</button>
+      </div>
+      <label class="field">
+        <span>选择游戏所在文件夹（自动查找其中的 .exe）</span>
+        <div class="row">
+          <button id="pickScanFolder">选择文件夹</button>
+          <span class="hint" id="scanFolderPath"></span>
+        </div>
+      </label>
+      <div class="scan-list" id="scanList"></div>
+      <div class="modal-foot">
+        <span class="hint" id="scanCount"></span>
+        <button id="scanImport" class="primary">导入选中</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 存档目录弹窗 -->
+  <div class="modal" id="saveModal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>存档目录 · <span id="saveGameName"></span></h2>
+        <button class="close" data-close>✕</button>
+      </div>
+      <div class="hint" id="saveHint">正在探测存档目录…</div>
+      <div class="save-list" id="saveList"></div>
+      <div class="hint" id="saveSearchHint"></div>
+      <div class="modal-foot">
+        <button id="savePickManual">手动指定目录…</button>
+        <button id="saveSearchWiki" class="primary">🌐 在线查询存档位置</button>
+        <button id="saveSearchWeb">🔍 网页搜索</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 启动选项确认弹窗（管理里选了「在开始游戏时询问」时弹出） -->
+  <div class="modal" id="launchArgsModal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>启动选项 · <span id="launchArgsGame"></span></h2>
+        <button class="close" data-close>✕</button>
+      </div>
+      <div class="hint">可临时修改本次启动参数；留空即直接启动。</div>
+      <input type="text" id="launchArgsInput" placeholder="例如：-windowed -novid" />
+      <div class="modal-foot">
+        <button id="launchArgsGo" class="primary">▶ 启动游戏</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 电源操作确认弹窗 -->
+  <div class="modal" id="powerModal" hidden>
+    <div class="modal-card" style="width:min(420px,92vw)">
+      <div class="modal-head">
+        <h2 id="powerTitle">确认操作</h2>
+        <button class="close" data-close>✕</button>
+      </div>
+      <div class="hint" id="powerText"></div>
+      <div class="modal-foot">
+        <button data-close>取消</button>
+        <button id="powerConfirm" class="primary danger">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="screensaver"></div>
+  <script src="screensaver.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
