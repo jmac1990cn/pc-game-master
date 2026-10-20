@@ -29,7 +29,8 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Build installer
-        run: npm run build
+        shell: bash
+        run: npm run build 2>&1 | tee build-full.log
         env:
           DEBUG: electron-builder
 
@@ -40,3 +41,20 @@ jobs:
           files: dist/PC Game Master-*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Surface build error on failure
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          echo "===== BUILD LOG (last 120 lines) ====="
+          tail -n 120 build-full.log
+          BODY="$(tail -n 120 build-full.log)"
+          NUM=$(gh issue list --repo "$GH_REPO" --search "CI Build Failure Log in:title" --state open --json number --jq '.[0].number')
+          if [ -n "$NUM" ] && [ "$NUM" != "null" ]; then
+            gh issue edit "$NUM" --repo "$GH_REPO" --body "$BODY" || true
+          else
+            gh issue create --repo "$GH_REPO" --title "CI Build Failure Log" --body "$BODY" || true
+          fi
