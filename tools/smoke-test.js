@@ -914,6 +914,48 @@ const expect = (name, pass, detail) => {
       try { fs.rmSync(base, { recursive: true, force: true }); } catch (e) {}
     })();
 
+    // Epic 扫描：新版 EGL v2 / 预览版用户级清单（installations.jsonl）解析（v1.0.2 修复）
+    // 旧实现只扫 ProgramData 下的 *.item，而预览版客户端把清单放在
+    // %LOCALAPPDATA%\com.epicgames.eglv2\installations.jsonl，导致读不出预览版装的 Epic 游戏。
+    (function testScanEpicEglv2() {
+      const eglBase = path.join(os.tmpdir(), 'gl-smoke-eglv2-' + Date.now());
+      const root = path.join(eglBase, 'com.epicgames.eglv2');
+      const cacheProd = path.join(root, 'cache', 'prod');
+      fs.mkdirSync(cacheProd, { recursive: true });
+      // 游戏显示名缓存：namespace:itemId -> title
+      fs.writeFileSync(path.join(cacheProd, 'catalog-cache.json'), JSON.stringify({
+        items: { 'item-xyz': { item: { id: 'item-xyz', namespace: 'ns-1', title: 'My Epic Game' } } }
+      }));
+      // 清单：header 行 + 1 个正常游戏 + 1 个 deleted（应被过滤）
+      const jsonl = [
+        JSON.stringify({ version: 1, entries: 2 }),
+        '',
+        JSON.stringify({ installationId: 'i1', dir: 'C:/games/MyGame', namespace: 'ns-1', itemId: 'item-xyz', artifactId: 'art-1', launchExecutable: 'game.exe' }),
+        JSON.stringify({ installationId: 'i2', dir: 'C:/games/Del', namespace: 'ns-2', itemId: 'item-del', artifactId: 'art-2', launchExecutable: 'del.exe', deleted: true })
+      ].join('\n');
+      fs.writeFileSync(path.join(root, 'installations.jsonl'), jsonl);
+
+      const titleMap = realScanner.buildEpicTitleMap([root]);
+      expect('eglv2 标题映射：namespace:itemId -> title 命中', titleMap.get('ns-1:item-xyz') === 'My Epic Game', String(titleMap.get('ns-1:item-xyz')));
+
+      const games = realScanner.parseEglv2Installations(path.join(root, 'installations.jsonl'), titleMap);
+      expect('eglv2 解析：数量=1（deleted 记录已过滤）', games.length === 1, 'len=' + games.length);
+      expect('eglv2 解析：显示名来自 catalog 缓存（非文件夹名兜底）', games[0].name === 'My Epic Game', games[0].name);
+      expect('eglv2 解析：id 用 epic:<itemId>', games[0].id === 'epic:item-xyz', games[0].id);
+      expect('eglv2 解析：启动 URI 三段式 namespace%3AitemId%3AartifactId',
+        games[0].launchCommand === 'com.epicgames.launcher://apps/ns-1%3Aitem-xyz%3Aart-1?action=launch&silent=true',
+        games[0].launchCommand);
+      expect('eglv2 解析：exe 不存在时为 null（未下载完/路径无 exe）', games[0].executable === null, String(games[0].executable));
+
+      // buildEpicUriV2 纯函数
+      expect('eglv2 URI：字段全缺返回 null', realScanner.buildEpicUriV2({}) === null);
+      expect('eglv2 URI：三段式拼接正确',
+        realScanner.buildEpicUriV2({ namespace: 'a', itemId: 'b', artifactId: 'c' }) === 'com.epicgames.launcher://apps/a%3Ab%3Ac?action=launch&silent=true');
+
+      try { fs.rmSync(eglBase, { recursive: true, force: true }); } catch (e) {}
+    })();
+
+
     // 平台就绪等待：可配置 + 边界收敛（宁可多等，一次成功，不做早退重试）
     expect('就绪等待：默认 15 秒',
       realPlatform.READY_WAIT_MS === 15000 && realPlatform.DEFAULT_READY_WAIT_SEC === 15,

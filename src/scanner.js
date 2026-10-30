@@ -196,6 +196,105 @@ function buildEpicUri(m) {
   return `com.epicgames.launcher://apps/${parts.join('%3A')}?action=launch&silent=true`;
 }
 
+/* ----------------------------- Epic（新版 EGL v2 / 预览版） -----------------------------
+ * 新版 Epic Games Launcher（含预览版 / 重新设计的客户端）把「已安装游戏」记录在
+ *   用户级目录 %LOCALAPPDATA%\com.epicgames.eglv2\installations.jsonl （JSONL，每行一个对象）
+ * 而非旧版的机器级 ProgramData\Epic\EpicGamesLauncher\Data\Manifests\*.item。
+ * 清单里没有游戏显示名，需要从 cache 下的 catalog / library 缓存用 namespace:itemId 匹配 title。
+ */
+
+/**
+ * 从 eglv2 缓存构建 "namespace:itemId -> 游戏显示名" 映射。
+ * 数据源（任一存在即可）：
+ *   - cache/prod/catalog-cache.json            : { items: { <itemId>: { item: { namespace, title } } } }
+ *   - cache/prod/account/<hash>/library-cache.json : { items: [ { appId:{namespaceId,itemId}, title } ] }
+ */
+function buildEpicTitleMap(roots) {
+  const map = new Map();
+  const add = (ns, itemId, title) => {
+    if (ns && itemId && title) map.set(`${ns}:${itemId}`, title);
+  };
+  for (const root of roots) {
+    if (!root || !fs.existsSync(root)) continue;
+    const cat = path.join(root, 'cache', 'prod', 'catalog-cache.json');
+    if (fs.existsSync(cat)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(cat, 'utf8'));
+        const items = data && data.items ? data.items : null;
+        if (items) {
+          for (const k of Object.keys(items)) {
+            const it = items[k] && (items[k].item || items[k]);
+            if (it && it.title) add(it.namespace, k, it.title);
+          }
+        }
+      } catch (e) { /* ignore */ }
+    }
+    const acctDir = path.join(root, 'cache', 'prod', 'account');
+    if (fs.existsSync(acctDir)) {
+      try {
+        for (const acct of fs.readdirSync(acctDir)) {
+          const lib = path.join(acctDir, acct, 'library-cache.json');
+          if (!fs.existsSync(lib)) continue;
+          const data = JSON.parse(fs.readFileSync(lib, 'utf8'));
+          const items = data && data.items ? data.items : [];
+          for (const it of items) {
+            if (it && it.appId && it.title) add(it.appId.namespaceId, it.appId.itemId, it.title);
+          }
+        }
+      } catch (e) { /* ignore */ }
+    }
+  }
+  return map;
+}
+
+/**
+ * 解析 eglv2 的 installations.jsonl（JSONL），返回已定位的游戏对象数组。
+ * 处理：跳过 header 行（含 version 无 dir）、跳过 deleted、按 installationId 取最新非 deleted 记录。
+ */
+function parseEglv2Installations(jsonlPath, titleMap) {
+  const text = fs.readFileSync(jsonlPath, 'utf8');
+  const lines = text.split(/\r?\n/);
+  const latest = new Map();
+  for (const line of lines) {
+    const s = line.trim();
+    if (!s) continue;
+    let obj;
+    try { obj = JSON.parse(s); } catch (e) { continue; }
+    if (obj.version !== undefined && !obj.dir) continue; // header 行
+    if (!obj.installationId || !obj.dir || !obj.launchExecutable) continue;
+    if (obj.deleted) { latest.delete(obj.installationId); continue; }
+    latest.set(obj.installationId, obj);
+  }
+  const out = [];
+  for (const e of latest.values()) {
+    const installLocation = e.dir;
+    const exe = path.resolve(installLocation, e.launchExecutable);
+    const executable = fs.existsSync(exe) ? exe : null;
+    const name = titleMap.get(`${e.namespace}:${e.itemId}`) || path.basename(installLocation);
+    const id = `epic:${e.itemId || e.namespace || installLocation}`;
+    out.push(makeGame({
+      id,
+      name,
+      platform: 'epic',
+      cover: null,
+      background: null,
+      defaultBackground: null,
+      executable,
+      launchCommand: buildEpicUriV2(e),
+      installPath: installLocation,
+      icon: executable
+    }));
+  }
+  return out;
+}
+
+/** 新版 Epic（EGL v2）启动 URI：namespace%3AitemId%3AartifactId */
+function buildEpicUriV2(e) {
+  const parts = [e && e.namespace, e && e.itemId, e && e.artifactId].filter(Boolean);
+  if (!parts.length) return null;
+  return `com.epicgames.launcher://apps/${parts.join('%3A')}?action=launch&silent=true`;
+}
+
 /**
  * 纯函数：战网游戏的启动命令（导出便于单测）。
  *
@@ -215,16 +314,36 @@ function buildBnetLaunchCommand(code, launcher) {
 function scanEpic() {
   const byId = new Map();
   try {
+    // 1) 新版 / 预览版（EGL v2）用户级清单：
+    //    %LOCALAPPDATA%\com.epicgames.eglv2\installations.jsonl
+    //    以及旧版用户级安装：%LOCALAPPDATA%\Epic Games\installations.jsonl
+    //    （Epic 客户端若是「用户级安装」，游戏清单在 AppData 而非 ProgramData）
+    const localAppData = process.env.LOCALAPPDATA ||
+      (process.env.USERPROFILE ? path.join(process.env.USERPROFILE, 'AppData', 'Local') : null);
+    const eglv2Roots = [];
+    if (localAppData) {
+      eglv2Roots.push(path.join(localAppData, 'com.epicgames.eglv2'));
+      eglv2Roots.push(path.join(localAppData, 'Epic Games'));
+    }
+    const titleMap = buildEpicTitleMap(eglv2Roots);
+    for (const root of eglv2Roots) {
+      if (!root) continue;
+      const jsonl = path.join(root, 'installations.jsonl');
+      if (!fs.existsSync(jsonl)) continue;
+      try {
+        for (const g of parseEglv2Installations(jsonl, titleMap)) {
+          const prev = byId.get(g.id);
+          if (!prev || (!prev.executable && g.executable)) byId.set(g.id, g);
+        }
+      } catch (e) { /* 单文件解析失败忽略 */ }
+    }
+
+    // 2) 旧版（稳定版 / 预览版通道，机器级安装）：ProgramData\Epic\*\Data\Manifests\*.item
     const programData = process.env.ProgramData || 'C:\\ProgramData';
     const epicRoot = path.join(programData, 'Epic');
     const manifestDirs = [];
-
-    // 稳定版（Public 通道）精确路径
     manifestDirs.push(path.join(epicRoot, 'EpicGamesLauncher', 'Data', 'Manifests'));
-    // 预览版（Preview / Early Access 通道）常见子目录名
     manifestDirs.push(path.join(epicRoot, 'EpicGamesLauncherPreview', 'Data', 'Manifests'));
-    // 通用兜底：遍历 ProgramData\Epic 下所有一级子目录的 Data\Manifests，
-    // 兼容任意发布通道（稳定版 / 预览版 / 未来通道），无需硬编码目录名。
     if (fs.existsSync(epicRoot)) {
       try {
         for (const sub of fs.readdirSync(epicRoot)) {
@@ -234,7 +353,6 @@ function scanEpic() {
         }
       } catch (e) { /* 权限不足等忽略 */ }
     }
-
     const seenDirs = new Set();
     for (const dir of manifestDirs) {
       if (!dir || seenDirs.has(dir) || !fs.existsSync(dir)) continue;
@@ -246,7 +364,6 @@ function scanEpic() {
       for (const f of files) {
         try {
           const m = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
-          // 跳过 DLC / 非主游戏（可选）
           const name = m.DisplayName || m.AppName || 'Epic 游戏';
           const installLocation = m.InstallLocation || '';
           let executable = null;
@@ -263,14 +380,10 @@ function scanEpic() {
             background: null,
             defaultBackground: null,
             executable,
-            // 始终给出 Epic 官方启动 URI（Playnite 同款）。Epic 游戏强依赖 EGL 会话/鉴权，
-            // 直接跑 exe 会被判定为「无有效会话」而自退；URI 把启动交给客户端：
-            // 系统唤起 EGL → 客户端完成登录与 DRM 校验 → 客户端拉起游戏。
             launchCommand: buildEpicUri(m),
             installPath: installLocation,
             icon: executable
           });
-          // 同一游戏可能被稳定版/预览版两个通道各记一次，按 id 去重，优先保留能定位到 exe 的版本
           const prev = byId.get(id);
           if (!prev || (!prev.executable && g.executable)) byId.set(id, g);
         } catch (e) {
@@ -899,6 +1012,9 @@ module.exports = {
   scanAll,
   scanEpic,            // 导出便于单测：Epic 多通道 manifest 扫描（稳定版/预览版/通用兜底）
   buildEpicUri,         // 导出便于单测：Epic 三段式官方启动 URI（命名空间:%3A:Cid:%3A:AppName）
+  buildEpicUriV2,       // 导出便于单测：Epic EGL v2 启动 URI（namespace%3AitemId%3AartifactId）
+  parseEglv2Installations, // 导出便于单测：解析 EGL v2 installations.jsonl
+  buildEpicTitleMap,    // 导出便于单测：从 eglv2 缓存匹配 namespace:itemId -> title
   buildBnetLaunchCommand, // 导出便于单测：战网官方 --exec="launch CODE"，无客户端时退回 battlenet://CODE
   scanBattleNet,        // 导出便于单测：战网双来源（LaunchOptions + 卸载表）
   PLATFORM_NAMES,
