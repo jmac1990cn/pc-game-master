@@ -1,7 +1,7 @@
 {
   "name": "pc-game-master",
   "productName": "PC Game Master",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Windows 游戏管理前端：Steam / Epic / 国服战网 / 育碧 / Xbox，大屏模式，游玩时长统计，音频通道切换，自定义背景，修改器联动启动",
   "main": "src/main.js",
   "author": "王总",

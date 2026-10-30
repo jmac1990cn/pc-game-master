@@ -317,7 +317,7 @@ function updateActionbar() {
   actionbar.hidden = false;
   $('abName').textContent = g.name;
   $('abPlatform').textContent = (PLATFORM_LABEL[g.platform] || g.platform) + (g.trainer ? ' · 已绑定修改器' : '');
-  $('abHint').textContent = '↑↓←→ / 左摇杆 选择 · Enter/A 打开详情 · X 管理 · Y 设置 · H 隐藏 · LB·RB 换平台 · Menu 刷新 · F10 切模式 · F11 全屏';
+  $('abHint').textContent = '↑↓←→ / 左摇杆 选择 · Enter/A 打开详情 · X 管理 · Y 设置 · H 隐藏 · LB·RB 换平台 · Menu 刷新 · 长按 View 打开电源菜单(可重启/关闭/关机) · F10 切模式 · F11 全屏';
   $('removeBtn').hidden = g.platform !== 'manual';   // 手动游戏：彻底移除
   $('hideBtn').hidden = g.platform === 'manual';     // 平台扫描游戏：隐藏
 }
@@ -1245,15 +1245,85 @@ const POWER_TEXT = {
   shutdown: { title: '关机', text: '系统将在 10 秒后关机。这 10 秒内可以点底部的「取消关机」撤回。', confirm: '关机' }
 };
 
-function togglePowerMenu() {
+function togglePowerMenu(focusFirst = false) {
   const menu = $('powerMenu');
+  const opening = menu.hidden;
   menu.hidden = !menu.hidden;
   $('powerWrap').classList.toggle('open', !menu.hidden);
+  // 手柄打开时自动把焦点放到第一项，便于方向键 / A 直接操作
+  if (opening && focusFirst) focusPowerItem(0);
 }
 
 function closePowerMenu() {
   $('powerMenu').hidden = true;
   $('powerWrap').classList.remove('open');
+  clearPowerFocus();
+}
+
+/* ----------------------------- 电源菜单（popover）手柄焦点 -----------------------------
+ * 三个选项（重启 / 关闭 / 关机）是 #powerMenu 里带 data-power 的按钮。
+ * 手柄：方向键 / 左摇杆上下移动焦点，A 触发当前项（走 askPower 确认流程），B 关闭菜单。 */
+let powerFocus = -1;
+
+function powerMenuEls() {
+  return [...document.querySelectorAll('#powerMenu button[data-power]')].filter(b => !b.hidden);
+}
+function focusPowerItem(i) {
+  const els = powerMenuEls();
+  if (!els.length) { powerFocus = -1; return; }
+  powerFocus = ((i % els.length) + els.length) % els.length;
+  els.forEach((b, idx) => b.classList.toggle('focused', idx === powerFocus));
+  const cur = els[powerFocus];
+  if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest' });
+}
+function movePowerFocus(step) {
+  if (powerFocus < 0) { focusPowerItem(0); return; }
+  focusPowerItem(powerFocus + step);
+}
+function activatePowerFocus() {
+  const els = powerMenuEls();
+  const cur = els[powerFocus >= 0 ? powerFocus : 0];
+  if (cur) cur.click();   // 复用现有点击逻辑：closePowerMenu + askPower
+}
+function clearPowerFocus() {
+  document.querySelectorAll('#powerMenu button.focused').forEach(b => b.classList.remove('focused'));
+  powerFocus = -1;
+}
+
+/* ----------------------------- 弹窗操作按钮手柄焦点 -----------------------------
+ * 用于「关机确认」等弹窗：手柄左右 / 左摇杆在「取消 / 确定」间移动，A 确认，B 取消。
+ * 默认高亮 primary（确定）按钮，让 A 直接完成确认；B 永远取消，避免误关机无退路。 */
+let modalFocus = 0;
+
+function modalActionEls() {
+  const modal = [...document.querySelectorAll('.modal')].find(m => !m.hidden);
+  if (!modal) return [];
+  return [...modal.querySelectorAll('.modal-foot button, .modal-actions button')]
+    .filter(b => b.offsetParent !== null);
+}
+function focusFirstModalAction() {
+  const els = modalActionEls();
+  if (!els.length) { modalFocus = 0; return; }
+  let idx = els.findIndex(b => b.classList.contains('primary'));
+  if (idx < 0) idx = 0;
+  modalFocus = idx;
+  els.forEach((b, i) => b.classList.toggle('focused', i === idx));
+}
+function moveModalAction(step) {
+  const els = modalActionEls();
+  if (!els.length) { modalFocus = 0; return; }
+  modalFocus = ((modalFocus + step) % els.length + els.length) % els.length;
+  els.forEach((b, idx) => b.classList.toggle('focused', idx === modalFocus));
+}
+function activateModalAction() {
+  const els = modalActionEls();
+  const cur = els[modalFocus] || els[0];
+  if (cur) cur.click();
+}
+function firstCloseBtn() {
+  const modal = [...document.querySelectorAll('.modal')].find(m => !m.hidden);
+  if (!modal) return null;
+  return modal.querySelector('.modal-foot [data-close], .modal-head [data-close], [data-close]');
 }
 
 function askPower(action) {
@@ -1827,7 +1897,7 @@ function onKey(e) {
   }
 }
 
-/** 手柄导航（标准布局，Xbox 风）：A 启动 / B 关闭 / X 管理 / Y 设置 / LB·RB 切筛选 / Dpad·左摇杆 导航 / Menu 刷新 / View 切全屏 */
+/** 手柄导航（标准布局，Xbox 风）：A 确认 / B 返回 / X 管理 / Y 设置 / LB·RB 切筛选 / Dpad·左摇杆 导航 / Menu 刷新 / View 长按打开电源菜单(短按切全屏) */
 function initGamepad() {
   if (!('getGamepads' in navigator)) { showStatus('当前环境不支持手柄 API'); return; }
   const prev = {};
@@ -1840,17 +1910,61 @@ function initGamepad() {
       const isPressed = (i) => !!(pad.buttons[i] && pad.buttons[i].pressed);
       // 边沿触发：仅按下瞬间触发一次，避免长按连发
       const hit = (i) => { const n = isPressed(i); const o = prev[id]['b' + i]; prev[id]['b' + i] = n; return n && !o; };
-      // 详情页：方向键 / 左摇杆 = 在「启动游戏 / 管理 / 存档 / 目录 / 隐藏」之间选择（不操作底层网格）
+
+      const powerOpen = !$('powerMenu').hidden;
       const detailOpen = !$('detail').hidden;
-      // 弹窗打开时：方向键 / LB·RB / 左摇杆 切换分页，不再操作底层网格
       const modalOpen = !detailOpen
         && [...document.querySelectorAll('.modal')].some(m => !m.hidden);
+      const shuttingDown = !$('shutdownBar').hidden;
+
+      // ---- View(8)：长按打开/关闭电源菜单；短按切全屏（菜单已开时不响应，避免误触）----
+      if (!powerOpen) {
+        const vNow = isPressed(8);
+        const vPrev = prev[id].viewPrev || false;
+        if (vNow && !vPrev) { prev[id].viewDownAt = Date.now(); prev[id].viewLongFired = false; } // 按下边沿
+        if (!vNow && vPrev) {                                                                      // 松开边沿
+          if (!prev[id].viewLongFired && Date.now() - (prev[id].viewDownAt || 0) < 600) toggleFullscreen();
+          prev[id].viewDownAt = 0;
+        }
+        if (vNow && prev[id].viewDownAt && !prev[id].viewLongFired
+            && Date.now() - prev[id].viewDownAt >= 600) {
+          prev[id].viewLongFired = true;
+          togglePowerMenu(true);   // 长按 View = 一键打开电源菜单
+        }
+        prev[id].viewPrev = vNow;
+      }
+
+      const ax = pad.axes[0] || 0, ay = pad.axes[1] || 0, dz = 0.6;
+      const sL = ax < -dz, sR = ax > dz, sU = ay < -dz, sD = ay > dz;
+
+      // ---- 电源菜单（popover）打开：方向键 / 左摇杆上下选，A 触发，B 关闭 ----
+      if (powerOpen) {
+        if (hit(12) || hit(14) || (sU && !prev[id]._pys)) movePowerFocus(-1);
+        if (hit(13) || hit(15) || (sD && !prev[id]._pys)) movePowerFocus(1);
+        if (hit(0)) activatePowerFocus();
+        if (hit(1)) closePowerMenu();
+        prev[id]._pys = sU || sD;
+        continue;   // 菜单打开时不再操作底层网格
+      }
+
+      // ---- 关机倒计时条：B / View 取消关机 ----
+      if (shuttingDown) {
+        if (hit(1) || hit(8)) cancelShutdown();
+        continue;
+      }
+
+      // ---- 详情页：方向键 / 左摇杆在「启动 / 管理 / 存档 / 目录 / 隐藏」间选 ----
       if (detailOpen) {
         if (hit(14) || hit(12)) moveDetailFocus(-1);
         if (hit(15) || hit(13)) moveDetailFocus(1);
       } else if (modalOpen) {
+        // 上/下 + LB·RB 切分页（tabbed 弹窗；非 tabbed 如关机确认为 no-op）
         if (hit(14) || hit(12) || hit(4)) switchTab(-1);
         if (hit(15) || hit(13) || hit(5)) switchTab(1);
+        // 左/右 在「取消 / 确定」按钮间移动
+        if (hit(11)) moveModalAction(-1);
+        if (hit(10)) moveModalAction(1);
+        if (!modalActionEls().some(b => b.classList.contains('focused'))) focusFirstModalAction();
       } else {
         // 方向键
         if (hit(12)) move(0, -1);
@@ -1858,15 +1972,16 @@ function initGamepad() {
         if (hit(14)) move(-1, 0);
         if (hit(15)) move(1, 0);
       }
-      // 左摇杆（带死区）：始终维护边沿状态
-      const ax = pad.axes[0] || 0, ay = pad.axes[1] || 0, dz = 0.6;
-      const sL = ax < -dz, sR = ax > dz, sU = ay < -dz, sD = ay > dz;
+
+      // 左摇杆（带死区）：维护边沿状态并做对应导航
       if (detailOpen) {
         if ((sL || sU) && !prev[id]._sx) moveDetailFocus(-1);
         if ((sR || sD) && !prev[id]._sx) moveDetailFocus(1);
       } else if (modalOpen) {
-        if (sL && !prev[id]._sx) switchTab(-1);
-        if (sR && !prev[id]._sx) switchTab(1);
+        if (sU && !prev[id]._my) switchTab(-1);
+        if (sD && !prev[id]._my) switchTab(1);
+        if (sL && !prev[id]._mx) moveModalAction(-1);
+        if (sR && !prev[id]._mx) moveModalAction(1);
       } else {
         if (sL && !prev[id]._sx) move(-1, 0);
         if (sR && !prev[id]._sx) move(1, 0);
@@ -1874,19 +1989,25 @@ function initGamepad() {
         if (sD && !prev[id]._sy) move(0, 1);
       }
       prev[id]._sx = sL || sR; prev[id]._sy = sU || sD;
-      // 动作键
+      prev[id]._mx = sL || sR; prev[id]._my = sU || sD;
+
+      // ---- 动作键 ----
       if (hit(0)) { // A
-        if (detailOpen) activateDetailAction();   // 触发当前高亮的按钮（默认「启动游戏」）
+        if (detailOpen) activateDetailAction();     // 触发当前高亮详情按钮（默认「启动游戏」）
+        else if (modalOpen) activateModalAction();  // 触发当前高亮弹窗按钮（默认「确定」）
         else { const g = filtered[selectedIndex]; if (g) openDetail(g); }
       }
-      if (hit(1)) { if (detailOpen) closeDetail(); else closeAllModals(); } // B
-      if (hit(2)) { if (detailOpen) openManageFromDetail(); else openManage(); } // X 管理（详情内用 detailId，避免打开错误游戏）
-      if (hit(3)) { if (detailOpen) { closeDetail(); openSettings(); } else openSettings(); } // Y 设置（先关详情，避免被遮挡）
-      if (!detailOpen) {
+      if (hit(1)) { // B
+        if (detailOpen) closeDetail();
+        else if (modalOpen) { const c = firstCloseBtn(); if (c) c.click(); else closeAllModals(); }
+      }
+      if (hit(2)) { if (detailOpen) openManageFromDetail(); else if (!modalOpen) openManage(); } // X 管理
+      if (hit(3)) { if (detailOpen) { closeDetail(); openSettings(); } else if (!modalOpen) openSettings(); } // Y 设置
+      if (!detailOpen && !modalOpen) {
         if (hit(4)) cycleFilter(-1);   // LB 上一平台
         if (hit(5)) cycleFilter(1);    // RB 下一平台
         if (hit(9)) refreshList();     // Menu/Start 刷新
-        if (hit(8)) toggleFullscreen(); // View 切全屏
+        // View(8) 全屏切换已上移至顶部「短按/长按」逻辑
       }
     }
   }, 60);

@@ -73,6 +73,26 @@ function isRunning(pf) {
 
 /* ----------------------------- 启动器定位 ----------------------------- */
 
+/**
+ * 常见 Program Files 候选根（含非 C 盘），用于「注册表没查到启动器」时的兜底扫描。
+ * 只生成路径字符串、由调用方 fs.existsSync 判断，避免无谓开销；该兜底仅在注册表未命中时才会走到。
+ * 让平台客户端装在非 C 盘（如 D:\Program Files (x86)）且注册表里缺失时，也能被定位到。
+ */
+function programFilesCandidates() {
+  const roots = [];
+  const add = (p) => { if (p && !roots.includes(p)) roots.push(p); };
+  add(process.env['ProgramFiles(x86)']);
+  add(process.env.ProgramFiles);
+  add('C:\\Program Files (x86)');
+  add('C:\\Program Files');
+  for (let i = 68; i <= 90; i++) {            // D: .. Z:
+    const d = String.fromCharCode(i) + ':\\';
+    add(d + 'Program Files (x86)');
+    add(d + 'Program Files');
+  }
+  return roots.filter(Boolean);
+}
+
 const STEAM_KEYS = [
   ['HKCU\\Software\\Valve\\Steam', 'SteamExe'],
   ['HKCU\\Software\\Valve\\Steam', 'SteamPath']
@@ -86,7 +106,7 @@ function findSteam() {
     const exe = path.join(v, 'steam.exe');
     if (fs.existsSync(exe)) return exe;
   }
-  for (const c of ['C:\\Program Files (x86)\\Steam\\steam.exe', 'C:\\Program Files\\Steam\\steam.exe']) {
+  for (const c of programFilesCandidates().map(r => path.join(r, 'Steam', 'steam.exe'))) {
     if (fs.existsSync(c)) return c;
   }
   return null;
@@ -118,15 +138,17 @@ function findEpic() {
   ]) {
     if (fs.existsSync(c)) return c;
   }
-  // 通用兜底：遍历 C:\Program Files (x86)\Epic Games 下所有子目录找 EpicGamesLauncher.exe，
-  // 兼容预览版（Preview 通道）可能装在不同子目录、文件名仍为 EpicGamesLauncher.exe 的情况。
-  const pf86 = 'C:\\Program Files (x86)\\Epic Games';
-  if (fs.existsSync(pf86)) {
+  // 通用兜底：遍历各盘 Program Files\Epic Games 下所有子目录找 EpicGamesLauncher.exe，
+  // 兼容预览版（Preview 通道）可能装在不同子目录、文件名仍为 EpicGamesLauncher.exe 的情况，
+  // 也兼容装在非 C 盘的情况（注册表未命中时）。
+  for (const root of programFilesCandidates()) {
+    const base = path.join(root, 'Epic Games');
+    if (!fs.existsSync(base)) continue;
     try {
-      for (const sub of fs.readdirSync(pf86)) {
-        const exe = path.join(pf86, sub, 'Portal', 'Binaries', 'Win64', 'EpicGamesLauncher.exe');
+      for (const sub of fs.readdirSync(base)) {
+        const exe = path.join(base, sub, 'Portal', 'Binaries', 'Win64', 'EpicGamesLauncher.exe');
         if (fs.existsSync(exe)) return exe;
-        const exe2 = path.join(pf86, sub, 'EpicGamesLauncher.exe');
+        const exe2 = path.join(base, sub, 'EpicGamesLauncher.exe');
         if (fs.existsSync(exe2)) return exe2;
       }
     } catch (e) {}
@@ -140,10 +162,7 @@ function findBattleNet(settings) {
     const p = scanner.detectBattleNetLauncher(settings || {});
     if (p && fs.existsSync(p)) return p;
   } catch (e) {}
-  for (const c of [
-    'C:\\Program Files (x86)\\Battle.net\\Battle.net.exe',
-    'C:\\Program Files\\Battle.net\\Battle.net.exe'
-  ]) {
+  for (const c of programFilesCandidates().map(r => path.join(r, 'Battle.net', 'Battle.net.exe'))) {
     if (fs.existsSync(c)) return c;
   }
   return null;
@@ -162,10 +181,10 @@ function findUbisoft() {
       if (fs.existsSync(p)) return p;
     }
   }
-  for (const c of [
-    'C:\\Program Files (x86)\\Ubisoft\\Ubisoft Game Launcher\\UbisoftConnect.exe',
-    'C:\\Program Files (x86)\\Ubisoft\\Ubisoft Game Launcher\\upc.exe'
-  ]) {
+  for (const c of programFilesCandidates().map(r => path.join(r, 'Ubisoft', 'Ubisoft Game Launcher', 'UbisoftConnect.exe'))) {
+    if (fs.existsSync(c)) return c;
+  }
+  for (const c of programFilesCandidates().map(r => path.join(r, 'Ubisoft', 'Ubisoft Game Launcher', 'upc.exe'))) {
     if (fs.existsSync(c)) return c;
   }
   return null;
