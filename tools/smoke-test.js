@@ -886,17 +886,32 @@ const expect = (name, pass, detail) => {
       fs.mkdirSync(stableDir, { recursive: true });
       fs.mkdirSync(previewDir, { recursive: true });
 
+      // 真实安装目录（旧版 .item 路径现在要求安装目录真实存在，否则视为已卸载）
+      const installRoot = path.join(base, 'installed');
+      const sharedLoc = path.join(installRoot, 'fortnite');
+      const previewLoc = path.join(installRoot, 'previewonly');
+      fs.mkdirSync(sharedLoc, { recursive: true });
+      fs.mkdirSync(previewLoc, { recursive: true });
+      fs.writeFileSync(path.join(sharedLoc, 'Fortnite.exe'), 'mz fake', 'utf8');
+      fs.writeFileSync(path.join(previewLoc, 'Preview.exe'), 'mz fake', 'utf8');
+
       const shared = {
         CatalogNamespace: 'fn', CatalogItemId: 'fortnite-001', AppName: 'Fortnite',
-        DisplayName: 'Fortnite', InstallLocation: '', LaunchExecutable: ''
+        DisplayName: 'Fortnite', InstallLocation: sharedLoc, LaunchExecutable: 'Fortnite.exe'
       };
       const previewOnly = {
         CatalogNamespace: 'ue', CatalogItemId: 'previewonly-002', AppName: 'PreviewOnly',
-        DisplayName: 'PreviewOnly Game', InstallLocation: '', LaunchExecutable: ''
+        DisplayName: 'PreviewOnly Game', InstallLocation: previewLoc, LaunchExecutable: 'Preview.exe'
+      };
+      // 已卸载（安装目录不存在）→ 必须被过滤
+      const removed = {
+        CatalogNamespace: 'rm', CatalogItemId: 'removed-003', AppName: 'RemovedGame',
+        DisplayName: 'Removed Game', InstallLocation: 'C:/games/AlreadyRemoved', LaunchExecutable: 'r.exe'
       };
       fs.writeFileSync(path.join(stableDir, 'a.item'), JSON.stringify(shared));
       fs.writeFileSync(path.join(previewDir, 'a.item'), JSON.stringify(shared));
       fs.writeFileSync(path.join(previewDir, 'b.item'), JSON.stringify(previewOnly));
+      fs.writeFileSync(path.join(stableDir, 'c.item'), JSON.stringify(removed));
 
       const saved = process.env.ProgramData;
       process.env.ProgramData = base;
@@ -909,8 +924,10 @@ const expect = (name, pass, detail) => {
       const ids = games.map(g => g.id);
       const hasPreviewOnly = ids.includes('epic:previewonly-002');
       const fortniteCount = ids.filter(id => id === 'epic:fortnite-001').length;
+      const removedFiltered = !ids.includes('epic:removed-003');
       expect('Epic 扫描：能扫到预览版（Preview 通道）目录里的游戏', hasPreviewOnly, 'ids=' + JSON.stringify(ids));
       expect('Epic 扫描：稳定版/预览版双通道同款游戏按 id 去重（只出现 1 次）', fortniteCount === 1, 'fortnite count=' + fortniteCount);
+      expect('Epic 扫描：安装目录不存在的已卸载游戏被过滤（修复：卸载后仍出现在库里）', removedFiltered, 'ids=' + JSON.stringify(ids));
       try { fs.rmSync(base, { recursive: true, force: true }); } catch (e) {}
     })();
 
@@ -926,12 +943,16 @@ const expect = (name, pass, detail) => {
       fs.writeFileSync(path.join(cacheProd, 'catalog-cache.json'), JSON.stringify({
         items: { 'item-xyz': { item: { id: 'item-xyz', namespace: 'ns-1', title: 'My Epic Game' } } }
       }));
-      // 清单：header 行 + 1 个正常游戏 + 1 个 deleted（应被过滤）
+      // 清单：header 行 + 1 个正常游戏（目录真实存在且含 exe）+ 1 个 deleted（应被过滤）
+      //        + 1 个「目录已被删」的已卸载游戏（应被目录存在性检查过滤）
+      const installedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gl-epic-inst-'));
+      fs.writeFileSync(path.join(installedDir, 'game.exe'), 'mz fake', 'utf8');
       const jsonl = [
-        JSON.stringify({ version: 1, entries: 2 }),
+        JSON.stringify({ version: 1, entries: 3 }),
         '',
-        JSON.stringify({ installationId: 'i1', dir: 'C:/games/MyGame', namespace: 'ns-1', itemId: 'item-xyz', artifactId: 'art-1', launchExecutable: 'game.exe' }),
-        JSON.stringify({ installationId: 'i2', dir: 'C:/games/Del', namespace: 'ns-2', itemId: 'item-del', artifactId: 'art-2', launchExecutable: 'del.exe', deleted: true })
+        JSON.stringify({ installationId: 'i1', dir: installedDir, namespace: 'ns-1', itemId: 'item-xyz', artifactId: 'art-1', launchExecutable: 'game.exe' }),
+        JSON.stringify({ installationId: 'i2', dir: 'C:/games/Del', namespace: 'ns-2', itemId: 'item-del', artifactId: 'art-2', launchExecutable: 'del.exe', deleted: true }),
+        JSON.stringify({ installationId: 'i3', dir: 'C:/games/AlreadyRemoved', namespace: 'ns-3', itemId: 'item-gone', artifactId: 'art-3', launchExecutable: 'gone.exe' })
       ].join('\n');
       fs.writeFileSync(path.join(root, 'installations.jsonl'), jsonl);
 
@@ -939,13 +960,17 @@ const expect = (name, pass, detail) => {
       expect('eglv2 标题映射：namespace:itemId -> title 命中', titleMap.get('ns-1:item-xyz') === 'My Epic Game', String(titleMap.get('ns-1:item-xyz')));
 
       const games = realScanner.parseEglv2Installations(path.join(root, 'installations.jsonl'), titleMap);
-      expect('eglv2 解析：数量=1（deleted 记录已过滤）', games.length === 1, 'len=' + games.length);
+      expect('eglv2 解析：数量=1（deleted 与「目录已删」的已卸载游戏都被过滤）', games.length === 1, 'len=' + games.length);
       expect('eglv2 解析：显示名来自 catalog 缓存（非文件夹名兜底）', games[0].name === 'My Epic Game', games[0].name);
       expect('eglv2 解析：id 用 epic:<itemId>', games[0].id === 'epic:item-xyz', games[0].id);
       expect('eglv2 解析：启动 URI 三段式 namespace%3AitemId%3AartifactId',
         games[0].launchCommand === 'com.epicgames.launcher://apps/ns-1%3Aitem-xyz%3Aart-1?action=launch&silent=true',
         games[0].launchCommand);
-      expect('eglv2 解析：exe 不存在时为 null（未下载完/路径无 exe）', games[0].executable === null, String(games[0].executable));
+      expect('eglv2 解析：exe 存在时解析为真实路径（非 null）',
+        games[0].executable && games[0].executable.endsWith('game.exe') && fs.existsSync(games[0].executable),
+        String(games[0].executable));
+      expect('eglv2 解析：目录不存在的已卸载游戏不出现在结果（修复：卸载后仍出现在库里）',
+        !games.some(g => g.id === 'epic:item-gone'), 'ids=' + games.map(g => g.id).join(','));
 
       // buildEpicUriV2 纯函数
       expect('eglv2 URI：字段全缺返回 null', realScanner.buildEpicUriV2({}) === null);

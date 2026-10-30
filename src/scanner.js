@@ -268,6 +268,9 @@ function parseEglv2Installations(jsonlPath, titleMap) {
   const out = [];
   for (const e of latest.values()) {
     const installLocation = e.dir;
+    // 安装目录已不存在 → 游戏已卸载（卸载删了目录 / 手动删文件夹），跳过。
+    // 否则会出现「库里还有、点了却启动不了」的幽灵条目（修复：卸载后仍出现在库里）。
+    if (!installLocation || !fs.existsSync(installLocation)) continue;
     const exe = path.resolve(installLocation, e.launchExecutable);
     const executable = fs.existsSync(exe) ? exe : null;
     const name = titleMap.get(`${e.namespace}:${e.itemId}`) || path.basename(installLocation);
@@ -366,8 +369,10 @@ function scanEpic() {
           const m = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
           const name = m.DisplayName || m.AppName || 'Epic 游戏';
           const installLocation = m.InstallLocation || '';
+          // 安装目录不存在 → 已卸载，跳过（与 EGL v2 同款过滤，杜绝幽灵条目）
+          if (!installLocation || !fs.existsSync(installLocation)) continue;
           let executable = null;
-          if (m.LaunchExecutable && installLocation) {
+          if (m.LaunchExecutable) {
             executable = path.resolve(installLocation, m.LaunchExecutable);
             if (!fs.existsSync(executable)) executable = null;
           }
