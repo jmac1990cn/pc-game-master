@@ -213,26 +213,50 @@ function buildBnetLaunchCommand(code, launcher) {
 }
 
 function scanEpic() {
-  const games = [];
+  const byId = new Map();
   try {
     const programData = process.env.ProgramData || 'C:\\ProgramData';
-    const manifestDir = path.join(programData, 'Epic', 'EpicGamesLauncher', 'Data', 'Manifests');
-    if (!fs.existsSync(manifestDir)) return games;
-    const files = fs.readdirSync(manifestDir).filter(f => f.endsWith('.item'));
-    for (const f of files) {
+    const epicRoot = path.join(programData, 'Epic');
+    const manifestDirs = [];
+
+    // 稳定版（Public 通道）精确路径
+    manifestDirs.push(path.join(epicRoot, 'EpicGamesLauncher', 'Data', 'Manifests'));
+    // 预览版（Preview / Early Access 通道）常见子目录名
+    manifestDirs.push(path.join(epicRoot, 'EpicGamesLauncherPreview', 'Data', 'Manifests'));
+    // 通用兜底：遍历 ProgramData\Epic 下所有一级子目录的 Data\Manifests，
+    // 兼容任意发布通道（稳定版 / 预览版 / 未来通道），无需硬编码目录名。
+    if (fs.existsSync(epicRoot)) {
       try {
-        const m = JSON.parse(fs.readFileSync(path.join(manifestDir, f), 'utf8'));
-        // 跳过 DLC / 非主游戏（可选）
-        const name = m.DisplayName || m.AppName || 'Epic 游戏';
-        const installLocation = m.InstallLocation || '';
-        let executable = null;
-        if (m.LaunchExecutable && installLocation) {
-          executable = path.resolve(installLocation, m.LaunchExecutable);
-          if (!fs.existsSync(executable)) executable = null;
+        for (const sub of fs.readdirSync(epicRoot)) {
+          if (sub === '.' || sub === '..') continue;
+          const candidate = path.join(epicRoot, sub, 'Data', 'Manifests');
+          if (fs.existsSync(candidate)) manifestDirs.push(candidate);
         }
-        games.push(
-          makeGame({
-            id: `epic:${m.CatalogItemId || m.AppName || name}`,
+      } catch (e) { /* 权限不足等忽略 */ }
+    }
+
+    const seenDirs = new Set();
+    for (const dir of manifestDirs) {
+      if (!dir || seenDirs.has(dir) || !fs.existsSync(dir)) continue;
+      seenDirs.add(dir);
+      let files = [];
+      try {
+        files = fs.readdirSync(dir).filter(f => f.endsWith('.item'));
+      } catch (e) { continue; }
+      for (const f of files) {
+        try {
+          const m = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+          // 跳过 DLC / 非主游戏（可选）
+          const name = m.DisplayName || m.AppName || 'Epic 游戏';
+          const installLocation = m.InstallLocation || '';
+          let executable = null;
+          if (m.LaunchExecutable && installLocation) {
+            executable = path.resolve(installLocation, m.LaunchExecutable);
+            if (!fs.existsSync(executable)) executable = null;
+          }
+          const id = `epic:${m.CatalogItemId || m.AppName || name}`;
+          const g = makeGame({
+            id,
             name,
             platform: 'epic',
             cover: null,
@@ -245,16 +269,19 @@ function scanEpic() {
             launchCommand: buildEpicUri(m),
             installPath: installLocation,
             icon: executable
-          })
-        );
-      } catch (e) {
-        /* 单个 manifest 出错忽略 */
+          });
+          // 同一游戏可能被稳定版/预览版两个通道各记一次，按 id 去重，优先保留能定位到 exe 的版本
+          const prev = byId.get(id);
+          if (!prev || (!prev.executable && g.executable)) byId.set(id, g);
+        } catch (e) {
+          /* 单个 manifest 出错忽略 */
+        }
       }
     }
   } catch (e) {
     console.error('Epic 扫描失败', e);
   }
-  return games;
+  return Array.from(byId.values());
 }
 
 /* ----------------------------- 战网 (Battle.net / 国服) -----------------------------
@@ -870,6 +897,7 @@ function findExes(folder, depth = 0, maxDepth = 3, out = []) {
 
 module.exports = {
   scanAll,
+  scanEpic,            // 导出便于单测：Epic 多通道 manifest 扫描（稳定版/预览版/通用兜底）
   buildEpicUri,         // 导出便于单测：Epic 三段式官方启动 URI（命名空间:%3A:Cid:%3A:AppName）
   buildBnetLaunchCommand, // 导出便于单测：战网官方 --exec="launch CODE"，无客户端时退回 battlenet://CODE
   scanBattleNet,        // 导出便于单测：战网双来源（LaunchOptions + 卸载表）

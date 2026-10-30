@@ -93,22 +93,43 @@ function findSteam() {
 }
 
 function findEpic() {
-  const uninstall = 'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\EpicGamesLauncher';
-  const uninstall32 = 'HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\EpicGamesLauncher';
-  for (const key of [uninstall, uninstall32]) {
-    const loc = reg.readRegValue(key, 'InstallLocation');
-    if (loc) {
-      const exe = path.join(loc, 'Portal', 'Binaries', 'Win64', 'EpicGamesLauncher.exe');
-      if (fs.existsSync(exe)) return exe;
-      const exe2 = path.join(loc, 'EpicGamesLauncher.exe');
-      if (fs.existsSync(exe2)) return exe2;
-    }
+  // 稳定版 + 预览版（Preview 通道）的卸载项
+  const uninstallKeys = [
+    'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\EpicGamesLauncher',
+    'HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\EpicGamesLauncher',
+    'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\EpicGamesLauncherPreview',
+    'HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\EpicGamesLauncherPreview'
+  ];
+  for (const key of uninstallKeys) {
+    try {
+      const loc = reg.readRegValue(key, 'InstallLocation');
+      if (loc) {
+        const exe = path.join(loc, 'Portal', 'Binaries', 'Win64', 'EpicGamesLauncher.exe');
+        if (fs.existsSync(exe)) return exe;
+        const exe2 = path.join(loc, 'EpicGamesLauncher.exe');
+        if (fs.existsSync(exe2)) return exe2;
+      }
+    } catch (e) {}
   }
+  // 常见安装路径（稳定版）
   for (const c of [
     'C:\\Program Files (x86)\\Epic Games\\Launcher\\Portal\\Binaries\\Win64\\EpicGamesLauncher.exe',
     'C:\\Program Files\\Epic Games\\Launcher\\Portal\\Binaries\\Win64\\EpicGamesLauncher.exe'
   ]) {
     if (fs.existsSync(c)) return c;
+  }
+  // 通用兜底：遍历 C:\Program Files (x86)\Epic Games 下所有子目录找 EpicGamesLauncher.exe，
+  // 兼容预览版（Preview 通道）可能装在不同子目录、文件名仍为 EpicGamesLauncher.exe 的情况。
+  const pf86 = 'C:\\Program Files (x86)\\Epic Games';
+  if (fs.existsSync(pf86)) {
+    try {
+      for (const sub of fs.readdirSync(pf86)) {
+        const exe = path.join(pf86, sub, 'Portal', 'Binaries', 'Win64', 'EpicGamesLauncher.exe');
+        if (fs.existsSync(exe)) return exe;
+        const exe2 = path.join(pf86, sub, 'EpicGamesLauncher.exe');
+        if (fs.existsSync(exe2)) return exe2;
+      }
+    } catch (e) {}
   }
   return null;
 }

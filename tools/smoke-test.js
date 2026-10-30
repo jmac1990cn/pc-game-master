@@ -876,6 +876,44 @@ const expect = (name, pass, detail) => {
     expect('Epic URI：字段全缺时返回 null（不会拼出无效 URI）',
       realScanner.buildEpicUri({ DisplayName: 'x' }) === null);
 
+    // Epic 扫描：预览版（Preview 通道）目录 + 稳定版/预览版跨通道去重（v1.0.1 修复）
+    // 旧实现只扫 ProgramData\Epic\EpicGamesLauncher\Data\Manifests，预览版客户端的
+    // manifest 在另一个子目录，导致读不出预览版客户端装的 Epic 游戏。
+    (function testScanEpicPreviewChannel() {
+      const base = path.join(os.tmpdir(), 'gl-smoke-epic-' + Date.now());
+      const stableDir = path.join(base, 'Epic', 'EpicGamesLauncher', 'Data', 'Manifests');
+      const previewDir = path.join(base, 'Epic', 'EpicGamesLauncherPreview', 'Data', 'Manifests');
+      fs.mkdirSync(stableDir, { recursive: true });
+      fs.mkdirSync(previewDir, { recursive: true });
+
+      const shared = {
+        CatalogNamespace: 'fn', CatalogItemId: 'fortnite-001', AppName: 'Fortnite',
+        DisplayName: 'Fortnite', InstallLocation: '', LaunchExecutable: ''
+      };
+      const previewOnly = {
+        CatalogNamespace: 'ue', CatalogItemId: 'previewonly-002', AppName: 'PreviewOnly',
+        DisplayName: 'PreviewOnly Game', InstallLocation: '', LaunchExecutable: ''
+      };
+      fs.writeFileSync(path.join(stableDir, 'a.item'), JSON.stringify(shared));
+      fs.writeFileSync(path.join(previewDir, 'a.item'), JSON.stringify(shared));
+      fs.writeFileSync(path.join(previewDir, 'b.item'), JSON.stringify(previewOnly));
+
+      const saved = process.env.ProgramData;
+      process.env.ProgramData = base;
+      let games = [];
+      try {
+        games = realScanner.scanEpic();
+      } finally {
+        process.env.ProgramData = saved;
+      }
+      const ids = games.map(g => g.id);
+      const hasPreviewOnly = ids.includes('epic:previewonly-002');
+      const fortniteCount = ids.filter(id => id === 'epic:fortnite-001').length;
+      expect('Epic 扫描：能扫到预览版（Preview 通道）目录里的游戏', hasPreviewOnly, 'ids=' + JSON.stringify(ids));
+      expect('Epic 扫描：稳定版/预览版双通道同款游戏按 id 去重（只出现 1 次）', fortniteCount === 1, 'fortnite count=' + fortniteCount);
+      try { fs.rmSync(base, { recursive: true, force: true }); } catch (e) {}
+    })();
+
     // 平台就绪等待：可配置 + 边界收敛（宁可多等，一次成功，不做早退重试）
     expect('就绪等待：默认 15 秒',
       realPlatform.READY_WAIT_MS === 15000 && realPlatform.DEFAULT_READY_WAIT_SEC === 15,
